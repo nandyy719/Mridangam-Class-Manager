@@ -10,7 +10,8 @@ class Student(db.Model):
     name = db.Column(db.String(200), nullable=False)
     birth_month = db.Column(db.Integer)
     birth_year = db.Column(db.Integer)
-    email = db.Column(db.String(200))
+    birthdate = db.Column(db.Date)  # Full birthdate
+    email = db.Column(db.String(200), nullable=False)
     mother_name = db.Column(db.String(200))
     mother_email = db.Column(db.String(200))
     father_name = db.Column(db.String(200))
@@ -28,6 +29,7 @@ class Student(db.Model):
             'name': self.name,
             'birth_month': self.birth_month,
             'birth_year': self.birth_year,
+            'birthdate': self.birthdate.isoformat() if self.birthdate else None,
             'email': self.email,
             'mother_name': self.mother_name,
             'mother_email': self.mother_email,

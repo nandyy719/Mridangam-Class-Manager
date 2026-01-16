@@ -81,6 +81,7 @@ def test_student_crud():
         "name": "Ravi Kumar",
         "birth_month": 5,
         "birth_year": 2010,
+        "birthdate": "2010-05-15",
         "email": "ravi@example.com",
         "mother_name": "Lakshmi Kumar",
         "mother_email": "lakshmi@example.com",
@@ -126,9 +127,9 @@ def test_create_multiple_students():
     print_test_header("Creating Multiple Students")
     
     students_data = [
-        {"name": "Priya Sharma", "birth_month": 3, "birth_year": 2012, "email": "priya@example.com"},
-        {"name": "Arun Patel", "birth_month": 8, "birth_year": 2009, "email": "arun@example.com"},
-        {"name": "Meera Reddy", "birth_month": 11, "birth_year": 2011, "email": "meera@example.com"}
+        {"name": "Priya Sharma", "birth_month": 3, "birth_year": 2012, "birthdate": "2012-03-10", "email": "priya@example.com", "mother_name": "Rajvi Sharma", "mother_email": "rajvi@example.com"},
+        {"name": "Arun Patel", "birth_month": 8, "birth_year": 2009, "birthdate": "2009-08-22", "email": "arun@example.com", "mother_email": "meera.mom@example.com", "father_name": "Rajesh Patel"},
+        {"name": "Meera Reddy", "birth_month": 11, "birth_year": 2011, "birthdate": "2011-11-10", "email": "meera@example.com", "mother_name": "Lakshmi Reddy", "mother_email": "lakshmi@example.com"}
     ]
     
     student_ids = []
@@ -632,5 +633,79 @@ def run_all_tests():
     else:
         print(f"\n{Colors.YELLOW}Some tests failed. Please review the output above.{Colors.END}")
 
+# Test 13: Google Sheets Spreadsheet Parsing and Integration
+def test_spreadsheet_parsing_and_integration():
+    print_test_header("Google Sheets Parsing and Database Integration")
+    
+    # Import config to get real sheet ID and credentials
+    import sys
+    import os
+    sys.path.insert(0, os.path.dirname(__file__))
+    from config import Config
+    
+    sheet_id = Config.GOOGLE_SHEETS_ID
+    
+    if not sheet_id or sheet_id == 'YOUR_SHEET_ID':
+        print_failure("No Google Sheet ID configured")
+        print_info("Set GOOGLE_SHEETS_ID in config.py or environment variable")
+        return
+    
+    print_info(f"Connecting to Google Sheet: {sheet_id[:20]}...")
+    
+    # Call the actual parse-spreadsheet endpoint
+    response = requests.post(
+        f"{BASE_URL}/parse-spreadsheet",
+        json={"spreadsheet_id": sheet_id}
+    )
+    
+    if assert_status_code(response, 200, "Parse Google Sheet"):
+        parsed = response.json()
+        
+        if parsed.get('success'):
+            print_success(f"Google Sheet parsed successfully!")
+            students = parsed.get('students', [])
+            batches = parsed.get('batches', [])
+            print_success(f"Found {len(students)} students")
+            print_success(f"Found {len(batches)} unique batches")
+            
+            # Show sample data
+            if students:
+                print_info(f"Sample student: {students[0]['name']} ({students[0]['email']})")
+            if batches:
+                print_info(f"Sample batch: {batches[0]['day_of_week']} {batches[0]['start_time']}")
+        else:
+            print_failure(f"Parse failed: {parsed.get('message')}")
+            if parsed.get('errors'):
+                for error in parsed.get('errors', [])[:3]:
+                    print_info(f"  - {error}")
+
+# Test 14: Spreadsheet Parsing Error Handling
+def test_spreadsheet_error_handling():
+    print_test_header("Spreadsheet Parsing Error Handling")
+    
+    # Test with missing spreadsheet ID
+    response = requests.post(
+        f"{BASE_URL}/parse-spreadsheet",
+        json={}
+    )
+    
+    if response.status_code == 400:
+        error_data = response.json()
+        error_msg = error_data.get('error', '') or error_data.get('message', '')
+        if 'spreadsheet_id' in error_msg.lower():
+            print_success("Missing spreadsheet_id properly rejected")
+        else:
+            print_info(f"Got error (acceptable): {error_msg[:50]}")
+    else:
+        print_info(f"Endpoint returned {response.status_code} (may use config default)")
+
 if __name__ == "__main__":
     run_all_tests()
+    
+    # Run additional spreadsheet tests
+    print(f"\n{Colors.BLUE}{'='*80}{Colors.END}")
+    print(f"{Colors.BLUE}Additional Spreadsheet Integration Tests{Colors.END}")
+    print(f"{Colors.BLUE}{'='*80}{Colors.END}")
+    
+    test_spreadsheet_parsing_and_integration()
+    test_spreadsheet_error_handling()

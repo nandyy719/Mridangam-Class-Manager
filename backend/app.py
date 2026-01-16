@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify
 from config import Config
 from models import db, Student, Batch, StudentBatch, Class, ClassAttendance, Invoice
+from utils.google_sheets import fetch_and_parse_spreadsheet
 from datetime import datetime, date
 
 app = Flask(__name__)
@@ -31,14 +32,35 @@ def get_student(student_id):
 def create_student():
     data = request.get_json()
     
+    # Validate required fields: name, email, birthdate
     if not data or not data.get('name'):
         return error_response('Name is required')
+    
+    if not data.get('email'):
+        return error_response('Email is required')
+    
+    if not data.get('birthdate'):
+        return error_response('Birthdate is required')
+    
+    # Validate that at least one parent name/email is present
+    has_mother = data.get('mother_name') or data.get('mother_email')
+    has_father = data.get('father_name') or data.get('father_email')
+    
+    if not (has_mother or has_father):
+        return error_response('At least one parent name or email must be provided')
+    
+    # Parse birthdate
+    try:
+        birthdate = datetime.strptime(data['birthdate'], '%Y-%m-%d').date()
+    except ValueError:
+        return error_response('Invalid birthdate format. Use YYYY-MM-DD')
     
     student = Student(
         name=data['name'],
         birth_month=data.get('birth_month'),
         birth_year=data.get('birth_year'),
-        email=data.get('email'),
+        birthdate=birthdate,
+        email=data['email'],
         mother_name=data.get('mother_name'),
         mother_email=data.get('mother_email'),
         father_name=data.get('father_name'),
@@ -428,6 +450,53 @@ def delete_invoice(invoice_id):
     db.session.delete(invoice)
     db.session.commit()
     return '', 204
+
+# GOOGLE SHEETS PARSING ROUTE
+@app.route('/api/parse-spreadsheet', methods=['POST'])
+def parse_spreadsheet():
+    """
+    Parse student and batch data directly from Google Sheets.
+    
+    Expected request JSON format:
+    {
+        "spreadsheet_id": "YOUR_GOOGLE_SHEET_ID",
+        "range": "Sheet1!A:H"  (optional, defaults to Sheet1!A:H)
+    }
+    
+    If spreadsheet_id is not provided, uses GOOGLE_SHEETS_ID from config.
+    
+    Returns:
+    {
+        "success": bool,
+        "message": str,
+        "errors": [str] or null,
+        "students": [...],
+        "batches": [...]
+    }
+    """
+    data = request.get_json() or {}
+    
+    # Get spreadsheet ID from request or config
+    spreadsheet_id = data.get('spreadsheet_id') or app.config.get('GOOGLE_SHEETS_ID')
+    
+    if not spreadsheet_id:
+        return error_response(
+            'spreadsheet_id is required in request body or GOOGLE_SHEETS_ID must be set in config'
+        )
+    
+    # Get range (optional)
+    range_name = data.get('range', app.config.get('GOOGLE_SHEETS_RANGE', 'Sheet1!A:H'))
+    
+    # Fetch and parse the spreadsheet
+    result = fetch_and_parse_spreadsheet(
+        spreadsheet_id=spreadsheet_id,
+        range_name=range_name,
+        credentials_path=app.config.get('GOOGLE_SHEETS_CREDENTIALS_PATH', 'credentials.json')
+    )
+    
+    # Return appropriate status code based on success
+    status_code = 200 if result['success'] else 400
+    return jsonify(result), status_code
 
 # Health check route
 @app.route('/api/health', methods=['GET'])
